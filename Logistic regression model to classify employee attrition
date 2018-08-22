@@ -1,0 +1,292 @@
+#############################HR Analytics Solution###################
+################################################################
+#Business Understanding
+#Data Understanding
+#Data Preparation & EDA
+#Model Building 
+#Model Evaluation
+################################################################
+
+### Business Understanding:
+# XYZâ suffers an attrition of 15% .
+# Company has shared the general data and an Employee survey findings.
+
+## AIM:
+# The objective is to model the âProbability of Attritionâ.
+
+###Data Quality-
+# Missing Values : NAs constitute only 2-3% of the observations and are thus being discarded.
+# Duplication:  No duplicates exist.
+# Outliers: Significant outliers also do not exist.
+
+### Data Understanding
+# Install and Load the required packages
+#install.packages("MASS")
+#install.packages("car")
+#install.packages("e1071")
+#install.packages("caret", dependencies = c("Depends", "Suggests"))
+#install.packages("cowplot")
+#install.packages("GGally")
+#install.packages("caTools")
+#install.packages("caret")
+
+library(MASS)
+library(car)
+library(e1071)
+library(caret)
+library(ggplot2)
+library(cowplot)
+library(caTools)
+
+
+# Loading 3 files
+emp <- read.csv("employ-survey-data.csv", stringsAsFactors = F)
+mgr <- read.csv("mgr-survey-data.csv", stringsAsFactors = F)
+gen.data <- read.csv("general_data.csv", stringsAsFactors = F)
+
+length(unique(emp$EmployeeID)) # Confirming EmployeeID is key 
+length(unique(mgr$EmployeeID)) #Confirming EmployeeID is key 
+length(unique(gen.data$EmployeeID)) # Confirming EmployeeID is key 
+
+setdiff(gen.data$EmployeeID,emp$EmployeeID) # Identical EmployeeID across these datasets
+setdiff(mgr$EmployeeID,emp$EmployeeID) # Identical EmployeeID across these datasets
+
+
+emp1 <- merge(emp,mgr, by="EmployeeID", all = F) 
+emp1 <- merge(gen.data,emp1,by ='EmployeeID', all = F) # Master file is created by merging three files
+
+str(emp1)  #Checking structure of the master file
+
+######################################################################################################
+### Data Preparation & Exploratory Data Analysis
+
+
+
+
+
+######## Creating dummy variables for categorical variables ##########
+
+array_name = sqldf("select DISTINCT BusinessTravel from emp1")
+View(array_name)
+
+dummy <- data.frame(model.matrix(~ factor(BusinessTravel), data=emp1))
+dummy <- dummy[,-1]
+emp2 <- cbind(emp1[,-4],dummy)
+
+############## Discarding insignificant variables by business logic and inspection  ############
+
+
+emp2 <- emp2[, -c(1,4,7,8,11,15,17)]
+
+############# Transforming Attrition varibale to numeric ##################
+emp2$Attrition<- as.numeric(levels(emp2$Attrition))[emp2$Attrition]
+
+emp1$Attrition<- ifelse(emp1$Attrition=="Yes",1,0)
+emp2<- emp2[,-2]
+emp3 <- emp1
+emp3 <- emp3[,3]
+emp2 <- cbind(emp2,emp3)
+
+
+########### Transforming Commute distance to work variable after binning the distance > & < 10  ###########
+
+emp2$DistanceFromHome <- as.factor(emp2$DistanceFromHome)
+unique(emp2$DistanceFromHome)
+levels(emp2$DistanceFromHome)[1:10] <- "Near_office"
+levels(emp2$DistanceFromHome)[2:19] <- "Far_office"
+
+########## Checking Attrition factor corr over variables #################
+
+ggplot(emp2, aes(JobRole, fill= factor(Attrition))) + geom_bar()
+
+ggplot(emp1, aes(Age, fill= factor(Attrition))) + geom_histogram()
+
+ggplot(emp2, aes(EducationField, fill= factor(Attrition))) + geom_bar()
+
+
+
+########## creating more dummy variables ##############################
+
+
+unique(emp2$MaritalStatus)
+
+dummy1 <- data.frame(model.matrix(~ MaritalStatus, data=emp2))
+dummy1 <- dummy1[,-1]
+emp2 <- cbind(emp2[,-7], dummy1)
+
+emp2$Gender<- ifelse(emp2$Gender=="Male",1,0)
+
+############# checking corr between 'working hours' & 'Companyhours' ###########
+
+cor(emp2$TotalWorkingYears,emp2$YearsAtCompany)
+
+
+###### Discarded TotalWorkingHrs ####################
+######### Binning Age, income, Hike, Years, Years under current Mgr , Trainng & dummy variables #######
+
+
+emp2$PercentSalaryHike <- cut(emp2$PercentSalaryHike, breaks = c( 10,15,20,30),
+                              labels = c("<10","10-15", ">15"), right =  FALSE)
+dummy5<- data.frame(model.matrix(~ Hike, data=emp2))
+dunnmy5 <- dummy5[,-1]
+emp3 <- cbind(emp2[,-4],dummy5)
+
+
+emp2$Age_gp <- cut(emp2$Age, breaks = c( 18,30, 40, 50, 60),
+                   labels = c("18-29","30-40", "40-50", "50-60"), right =  FALSE)
+dummy3 <- data.frame(model.matrix(~ Age_gp, data=emp3))
+dummy3 <- dummy3[,-1]
+emp3 <-cbind(emp3[,-21],dummy3)
+ggplot(emp2, aes(Age_gp, fill= factor(Attrition))) + geom_bar()
+       
+
+ggplot(emp3, aes(YearsWithCurrManager, fill= factor(Attrition))) + geom_bar()
+
+dummy4 <- data.frame(model.matrix(~ YearsWithCurrManager, data=emp3))
+dummy4 <- dummy4[,-1]
+emp3 <- cbind(emp3[,-4],dummy4)
+
+
+emp4$YearsAtCompany<- cut(emp4$YearsAtCompany, breaks = c( 0,5,10,20,30,45),
+                          labels = c("<1","1-5","5-10","10-20", "> 20"), right =  FALSE)
+
+dummy7<- data.frame(model.matrix(~ YearsAtCompany, data=emp4))
+dummy7 <- dummy7[,-1]
+emp4 <- cbind(emp4[,-5],dummy7)
+
+ggplot(emp4, aes(TrainingTimesLastYear, fill = factor(Attrition))) + geom_histogram()
+
+dummy6<- data.frame(model.matrix(~ factor(TrainingTimesLastYear), data=emp4))
+dunnmy6 <- dummy6[,-1]
+emp4 <- cbind(emp2[,-4],dummy6)
+
+
+
+########################################################################
+# splitting the data between train and test
+
+set.seed(100)
+indices = sample.split(emp4$Attrition, SplitRatio = 0.7)
+train = emp4[indices,]
+test = emp4[!(indices),]
+
+
+########################################################################
+# Logistic Regression: 
+#Initial model
+
+model.1 = glm(Attrition ~ ., data = train, family = "binomial")
+
+# Stepwise selection mode of discarding variables #
+
+model.2<- stepAIC(model.1, direction="both")
+summary(model.2)
+
+# Removing multicollinearity through VIF check
+vif(model.2)
+
+#Excluding High VIF 'BusinessTravelRarely' #
+
+model.3 <- glm(formula = Attrition ~ Education + YearsSinceLastPromotion + EnvironmentSatisfaction + JobSatisfaction + WorkLifeBalance + 
+                 JobInvolvement + factor.BusinessTravel.Travel_Frequently +  MaritalStatusMarried + MaritalStatusSingle + inc_slot10.20k +
+                 inc_slot40.50k + inc_slot50.60k + inc_slot90.100k + Age_gp30.40 + Age_gp40.50 + Age_gp50.60 + 
+                 YearsWithCurrManager.10 + factor.TrainingTimesLastYear.6 + 
+                 YearsAtCompany1.5 + YearsAtCompany5.10 + YearsAtCompany10.20, 
+                  family = "binomial", data = train)
+summary(model.3)
+
+#Excluding 	'Education', 'Inc-slots', 'Married' for high P-value #######
+#retaining jobInvolvement on Business judgement ###### Reasonable AIC ####
+
+model.4 <- glm(formula = Attrition ~ YearsSinceLastPromotion + EnvironmentSatisfaction + JobSatisfaction + WorkLifeBalance + 
+                 JobInvolvement + factor.BusinessTravel.Travel_Frequently +  MaritalStatusSingle + inc_slot10.20k + inc_slot40.50k + 
+                 Age_gp30.40 + Age_gp40.50 + Age_gp50.60 +   YearsWithCurrManager.10 + factor.TrainingTimesLastYear.6 + YearsAtCompany1.5
+                 + YearsAtCompany5.10 + YearsAtCompany10.20, family = "binomial", data = train)
+				 
+summary(model.4)
+
+
+#Excluding inc-slot ###
+
+model.5 <- glm(formula = Attrition ~ YearsSinceLastPromotion + EnvironmentSatisfaction + JobSatisfaction + WorkLifeBalance + 
+                 JobInvolvement + factor.BusinessTravel.Travel_Frequently +  MaritalStatusSingle + inc_slot40.50k + Age_gp30.40 + 
+                 Age_gp40.50 + Age_gp50.60 +   YearsWithCurrManager.10 + factor.TrainingTimesLastYear.6 + YearsAtCompany1.5 + 
+                 YearsAtCompany5.10 , family = "binomial", data = train)
+
+summary(model.5)
+
+#Excluding JobInvolvement,Environment,yearswithcurrentmgr , AIC increase observed ####
+
+model.6 <- glm(formula = Attrition ~ YearsSinceLastPromotion + JobSatisfaction + WorkLifeBalance +  factor.BusinessTravel.Travel_Frequently +  
+                 MaritalStatusSingle + inc_slot40.50k + Age_gp30.40 + Age_gp40.50 + factor.TrainingTimesLastYear.6 + YearsAtCompany1.5 + 
+                 YearsAtCompany5.10 , family = "binomial", data = train)
+
+summary(model.6)
+
+
+#Excluding promotion,Satisfaction,Training variables high P-values but Higher AIC ###
+
+model.7 <- glm(formula = Attrition ~ WorkLifeBalance +  factor.BusinessTravel.Travel_Frequently +  
+                 MaritalStatusSingle + Age_gp30.40 + Age_gp40.50 + factor.TrainingTimesLastYear.6 + YearsAtCompany1.5 + 
+                 YearsAtCompany5.10 , family = "binomial", data = train)
+
+summary(model.7)
+
+#Excluding High P-values, observed AIC increase ####
+
+model.8 <- glm(formula = Attrition ~ WorkLifeBalance +  factor.BusinessTravel.Travel_Frequently +  
+                 MaritalStatusSingle + Age_gp30.40 + Age_gp40.50 + YearsAtCompany1.5 + YearsAtCompany5.10 , 
+                    family = "binomial", data = train)
+summary(model.8)
+
+#Excluding High P-values, observed AIC increase #
+
+model.9 <- glm(formula = Attrition ~ WorkLifeBalance +  factor.BusinessTravel.Travel_Frequently +  
+                 MaritalStatusSingle + Age_gp40.50 + YearsAtCompany1.5 + YearsAtCompany5.10 , 
+                    family = "binomial", data = train)
+
+# Model.9 has all P-values very low though high AIC #
+
+#######################################################################
+### Model Evaluation for both model.4 & model.9
+
+### Test Data ####
+
+#predicted probabilities of Attrition 1 for test data					
+			
+
+test_pred4 = predict(model.4, type = "response",newdata = test[,-1])		
+test_pred9 = predict(model.9, type = "response",newdata = test[,-1])
+
+
+# Let's use the probability cutoff of 50%.
+test_pred_quit9 <- factor(ifelse(test_pred9 >= 0.50, "Yes", "No"))
+test_actual_quit9 <- factor(ifelse(test$Attrition==1,"Yes","No"))
+table(test_actual_quit9,test_pred_quit9)
+
+test_conf9 <- confusionMatrix(test_pred_quit9, test_actual_quit9, positive = "Yes")
+
+# While Accuracy is high , Sensitivity is Low, Let's use the probability cutoff of 20%.
+
+test_pred_quit9.2 <- factor(ifelse(test_pred9 >= 0.20, "Yes", "No"))
+test_actual_quit9.2 <- factor(ifelse(test$Attrition==1,"Yes","No"))
+table(test_actual_quit9.2,test_pred_quit9.2)
+
+test_conf9.2 <- confusionMatrix(test_pred_quit20, test_actual_quit20, positive = "Yes")
+
+# Lets check the parameters on model.4 with chosen cut-off 
+
+test_pred_quit20 <- factor(ifelse(test_pred4 >= 0.20, "Yes", "No"))
+test_actual_quit20 <- factor(ifelse(test$Attrition==1,"Yes","No"))
+table(test_actual_quit20,test_pred_quit20)
+
+test_conf20 <- confusionMatrix(test_pred_quit20, test_actual_quit20, positive = "Yes")
+test_conf20
+
+acc <- test_conf20$overall[1]
+
+sens <- test_conf20$byClass[1]
+
+spec <- test_conf20$byClass[2]
+
+
