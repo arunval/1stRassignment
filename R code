@@ -1,0 +1,82 @@
+# Load 'Uber Request Data' file
+
+uber.data <- read.csv("Uber Request Data.csv")
+
+# Request Date/Time and Drop Date/Time need to be split 
+#to analyse data for Date and Time , independently.
+
+uber.data <- separate(uber.data, Request.timestamp, into=c("Req.date", "req.time"), sep = " ")
+
+uber.data <- separate(uber.data, Drop.timestamp, into=c("drop.date", "drop.time"), sep = " ")
+
+# Time will be analysed on hourly basis hence 'Hour' is to be sub-setted.
+
+uber.data$req.time <- substr(uber.data$time, 1, 2)
+
+
+uber.data$drop.time <- substr(uber.data$drop.time, 1, 2)
+
+# Uber data will be grouped date-wise for summary of trip-status
+
+uber.data.dt.gp <- uber.data %>% group_by(Req.date,Status) %>% summarise(Total= length(Status))
+
+# Summary of trips status plotted day-wise
+# Taking date as category variable , calculating no.of requests with status filled with colors
+# bars are "dodge" to prevent overlap
+# color scheme "Set1" used.
+# Request numbers are set as labels at appropriate height
+
+ggplot(uber.data.dt.gp, aes(Req.date, Total, fill = Status))    + 
+  geom_bar(stat="identity" , position = "dodge")    +     
+  scale_fill_brewer(palette = "Set1") + 
+  geom_text(aes(label=Total), position= position_dodge(width=1),vjust=1)
+
+# Data needs to be analysed for rides from Airport/City grouped date-wise
+
+
+uber.data.dt.pp.gp <- uber.data %>% group_by(Req.date,Pickup.point) %>% summarise(Total= length(Status))
+
+# Summary of trips plotted Pickup point wise
+# Taking date as category variable , calculating no.of requests with Pickup point filled with colors
+# bars are "dodge" to prevent overlap
+# color scheme "Set1" used.
+# Request numbers are set as labels at appropriate height
+# Day-wise data for requests to Airport/City
+
+ggplot(uber.data.dt.pp.gp, aes(Req.date, Total, fill = Pickup.point))    +  
+  geom_bar(stat="identity" , position = "dodge")    +   
+  scale_fill_brewer(palette = "Set1") + 
+  geom_text(aes(label=Total), position= position_dodge(width=1),vjust=1)
+
+# Requests analysed on hourly basis
+uber.data.t.pp.gp <- uber.data %>% group_by(req.time,Pickup.point) %>% summarise(Total= length(Status))
+
+uber.data.t.gp <- uber.data %>% group_by(req.time,Status) %>% summarise(Total= length(Status))
+
+# Hourly summary of requests from Airport/City plotted
+
+> ggplot(uber.data.t.pp.gp, aes(req.time, Total, fill = Pickup.point))
+  +     geom_bar(stat="identity" , position = "dodge")  
+  +     scale_fill_brewer(palette = "Set1")
+  +     geom_text(aes(label=Total), position= position_dodge(width=1),vjust=1)
+
+# Hourly summary of status of requests plotted
+
+ggplot(uber.data.t.gp, aes(req.time, Total, fill = Status))
++     geom_bar(stat="identity" , position = "dodge")  
++     scale_fill_brewer(palette = "Set1")
++     geom_text(aes(label=Total), position= position_dodge(width=1),vjust=1)
+
+# To analyse how individual drivers completed trips on all 5 days
+
+uber.data.driver.gp <- uber.data %>% group_by(Driver.id, drop.date) %>% summarise(total = length(Status))
+
+uber.data.driver.gp <- filter(uber.data.driver.gp, drop.date != "NA")
+
+# Plotting the completed trips , employing jitter and selecting a distinct palette from
+# brewer to highlight weekday/weekend rush
+
+ggplot(uber.data.driver.complete.gp, aes(Driver.id,total, colour = factor(drop.date)))
++ geom_point(shape=20, size = 4, position = "jitter")
++ scale_color_brewer(palette="RdYlBu")
+
